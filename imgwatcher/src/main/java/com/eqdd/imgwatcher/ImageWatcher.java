@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.Nullable;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.util.AttributeSet;
@@ -29,8 +30,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.request.animation.GlideAnimation;
+import com.bumptech.glide.request.RequestOptions;
 import com.bumptech.glide.request.target.SimpleTarget;
+import com.bumptech.glide.request.transition.Transition;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
@@ -142,13 +144,14 @@ public class ImageWatcher extends FrameLayout implements GestureDetector.OnGestu
         vPager.setCurrentItem(initPosition);
         refreshCurrentIdx(initPosition);
     }
+
     /**
      * @param i              初始显示的图片位置
      * @param imageGroupList 被点击的ImageView的所在列表，加载图片时会提前展示列表中已经下载完成的thumb图片
      * @param urlList        被加载的图片url列表，数量必须大于等于 imageGroupList.size。 且顺序应当和imageGroupList保持一致
      */
-    public void show(int i,List<ImageView> imageGroupList, final List<String> urlList) {
-        if (i <0 || imageGroupList == null || urlList == null || imageGroupList.size() < 1 ||
+    public void show(int i, List<ImageView> imageGroupList, final List<String> urlList) {
+        if (i < 0 || imageGroupList == null || urlList == null || imageGroupList.size() < 1 ||
                 urlList.size() < imageGroupList.size()) {
             String info = "i[" + i + "]";
             info += "#imageGroupList " + (imageGroupList == null ? "null" : "size : " + imageGroupList.size());
@@ -733,9 +736,9 @@ public class ImageWatcher extends FrameLayout implements GestureDetector.OnGestu
 
             final boolean isPlayEnterAnimation = isFindEnterImagePicture;
             // loadHighDefinitionPicture
-            Glide.with(imageView.getContext()).load(mUrlList.get(pos)).asBitmap().into(new SimpleTarget<Bitmap>() {
+            Glide.with(imageView.getContext()).asBitmap().load(mUrlList.get(pos)).into(new SimpleTarget<Bitmap>() {
                 @Override
-                public void onResourceReady(Bitmap resource, GlideAnimation<? super Bitmap> glideAnimation) {
+                public void onResourceReady(Bitmap resource,  Transition<? super Bitmap>  glideAnimation) {
                     final int sourceDefaultWidth, sourceDefaultHeight, sourceDefaultTranslateX, sourceDefaultTranslateY;
                     int resourceImageWidth = resource.getWidth();
                     int resourceImageHeight = resource.getHeight();
@@ -772,190 +775,193 @@ public class ImageWatcher extends FrameLayout implements GestureDetector.OnGestu
                 }
 
                 @Override
-                public void onLoadFailed(Exception e, Drawable errorDrawable) {
+                public void onLoadFailed(@Nullable Drawable errorDrawable) {
                     notifyItemChangedState(pos, false, imageView.getDrawable() == null);
                 }
             });
 
-            if (isPlayEnterAnimation) {
-                iOrigin.setVisibility(View.INVISIBLE);
-                animBackgroundTransform(0xFF000000);
-            }
+
+            if(isPlayEnterAnimation)
+
+                {
+                    iOrigin.setVisibility(View.INVISIBLE);
+                    animBackgroundTransform(0xFF000000);
+                }
             return isPlayEnterAnimation;
-        }
-    }
-
-    private static class GestureHandler extends Handler {
-        WeakReference<ImageWatcher> mRef;
-
-        GestureHandler(ImageWatcher ref) {
-            mRef = new WeakReference<>(ref);
+            }
         }
 
-        @Override
-        public void handleMessage(Message msg) {
-            if (mRef.get() != null) {
-                ImageWatcher holder = mRef.get();
-                switch (msg.what) {
-                    case SINGLE_TAP_UP_CONFIRMED:
-                        holder.onSingleTapConfirmed();
-                        break;
-                    default:
-                        throw new RuntimeException("Unknown message " + msg); //never
+        private static class GestureHandler extends Handler {
+            WeakReference<ImageWatcher> mRef;
+
+            GestureHandler(ImageWatcher ref) {
+                mRef = new WeakReference<>(ref);
+            }
+
+            @Override
+            public void handleMessage(Message msg) {
+                if (mRef.get() != null) {
+                    ImageWatcher holder = mRef.get();
+                    switch (msg.what) {
+                        case SINGLE_TAP_UP_CONFIRMED:
+                            holder.onSingleTapConfirmed();
+                            break;
+                        default:
+                            throw new RuntimeException("Unknown message " + msg); //never
+                    }
                 }
             }
         }
-    }
-
-    @Override
-    public boolean onInterceptTouchEvent(MotionEvent ev) {
-        return mPagerPositionOffsetPixels == 0;
-    }
-
-    /**
-     * 动画执行时加入这个监听器后会自动记录标记 {@link ImageWatcher#isInTransformAnimation} 的状态<br/>
-     * isInTransformAnimation值为true的时候可以达到在动画执行时屏蔽触摸操作的目的
-     */
-    final AnimatorListenerAdapter mAnimTransitionStateListener = new AnimatorListenerAdapter() {
-        @Override
-        public void onAnimationCancel(Animator animation) {
-            isInTransformAnimation = false;
-        }
 
         @Override
-        public void onAnimationStart(Animator animation) {
-            isInTransformAnimation = true;
-            mTouchMode = TOUCH_MODE_AUTO_FLING;
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            return mPagerPositionOffsetPixels == 0;
         }
 
-        @Override
-        public void onAnimationEnd(Animator animation) {
-            isInTransformAnimation = false;
-        }
-    };
-
-    final TypeEvaluator<Integer> mColorEvaluator = new TypeEvaluator<Integer>() {
-        @Override
-        public Integer evaluate(float fraction, Integer startValue, Integer endValue) {
-            int startColor = startValue;
-            int endColor = endValue;
-
-            int alpha = (int) (Color.alpha(startColor) + fraction * (Color.alpha(endColor) - Color.alpha(startColor)));
-            int red = (int) (Color.red(startColor) + fraction * (Color.red(endColor) - Color.red(startColor)));
-            int green = (int) (Color.green(startColor) + fraction * (Color.green(endColor) - Color.green(startColor)));
-            int blue = (int) (Color.blue(startColor) + fraction * (Color.blue(endColor) - Color.blue(startColor)));
-            return Color.argb(alpha, red, green, blue);
-        }
-    };
-
-    public void setTranslucentStatus(int statusBarHeight) {
-        mStatusBarHeight = statusBarHeight;
-    }
-
-    public void setErrorImageRes(int resErrorImage) {
-        mErrorImageRes = resErrorImage;
-    }
-
-    private void refreshCurrentIdx(int position) {
-        if (mUrlList.size() > 1) {
-            tCurrentIdx.setVisibility(View.VISIBLE);
-            tCurrentIdx.setText((position + 1) + " / " + mUrlList.size());
-        } else {
-            tCurrentIdx.setVisibility(View.GONE);
-        }
-    }
-
-    @Override
-    public void setBackgroundColor(int color) {
-        mBackgroundColor = color;
-        super.setBackgroundColor(color);
-    }
-
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        mWidth = w;
-        mHeight = h;
-        MAX_TRANSLATE_X = mWidth / 2;
-        MAX_TRANSLATE_Y = mHeight / 2;
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (animImageTransform != null) animImageTransform.cancel();
-        animImageTransform = null;
-        if (animBackground != null) animBackground.cancel();
-        animBackground = null;
-    }
-
-    /**
-     * 当界面处于图片查看状态需要在Activity中的{@link Activity#onBackPressed()}
-     * 将事件传递给ImageWatcher优先处理<br/>
-     * 1、当处于收尾动画执行状态时，消费返回键事件<br/>
-     * 2、当图片处于放大状态时，执行图片缩放到原始大小的动画，消费返回键事件<br/>
-     * 3、当图片处于原始状态时，退出图片查看，消费返回键事件<br/>
-     * 4、其他情况，ImageWatcher并没有展示图片
-     */
-    public boolean handleBackPressed() {
-        return isInTransformAnimation || (iSource != null && getVisibility() == View.VISIBLE && onSingleTapConfirmed());
-    }
-
-    /**
-     * 将指定的ImageView形态(尺寸大小，缩放，旋转，平移，透明度)逐步转化到期望值
-     */
-    private void animSourceViewStateTransform(ImageView view, final ViewState vsResult) {
-        if (view == null) return;
-        if (animImageTransform != null) animImageTransform.cancel();
-
-        animImageTransform = ViewState.restoreByAnim(view, vsResult.mTag).addListener(mAnimTransitionStateListener).create();
-
-        if (animImageTransform != null) {
-            if (vsResult.mTag == ViewState.STATE_ORIGIN) {
-                animImageTransform.addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        // 如果是退出查看操作，动画执行完后，原始被点击的ImageView恢复可见
-                        if (iOrigin != null) iOrigin.setVisibility(View.VISIBLE);
-                        setVisibility(View.GONE);
-                    }
-                });
-            }
-            animImageTransform.start();
-        }
-    }
-
-    /**
-     * 执行ImageWatcher自身的背景色渐变至期望值[colorResult]的动画
-     */
-    private void animBackgroundTransform(final int colorResult) {
-        if (colorResult == mBackgroundColor) return;
-        if (animBackground != null) animBackground.cancel();
-        final int mCurrentBackgroundColor = mBackgroundColor;
-        animBackground = ValueAnimator.ofFloat(0, 1).setDuration(300);
-        animBackground.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                float p = (float) animation.getAnimatedValue();
-                setBackgroundColor(mColorEvaluator.evaluate(p, mCurrentBackgroundColor, colorResult));
-            }
-        });
-        animBackground.start();
-    }
-
-    /**
-     * 当前展示图片长按的回调
-     */
-    public interface OnPictureLongPressListener {
         /**
-         * @param v   当前被按的ImageView
-         * @param url 当前ImageView加载展示的图片url地址
-         * @param pos 当前ImageView在展示组中的位置
+         * 动画执行时加入这个监听器后会自动记录标记 {@link ImageWatcher#isInTransformAnimation} 的状态<br/>
+         * isInTransformAnimation值为true的时候可以达到在动画执行时屏蔽触摸操作的目的
          */
-        void onPictureLongPress(ImageView v, String url, int pos);
-    }
+        final AnimatorListenerAdapter mAnimTransitionStateListener = new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                isInTransformAnimation = false;
+            }
 
-    public void setOnPictureLongPressListener(OnPictureLongPressListener listener) {
-        mPictureLongPressListener = listener;
+            @Override
+            public void onAnimationStart(Animator animation) {
+                isInTransformAnimation = true;
+                mTouchMode = TOUCH_MODE_AUTO_FLING;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                isInTransformAnimation = false;
+            }
+        };
+
+        final TypeEvaluator<Integer> mColorEvaluator = new TypeEvaluator<Integer>() {
+            @Override
+            public Integer evaluate(float fraction, Integer startValue, Integer endValue) {
+                int startColor = startValue;
+                int endColor = endValue;
+
+                int alpha = (int) (Color.alpha(startColor) + fraction * (Color.alpha(endColor) - Color.alpha(startColor)));
+                int red = (int) (Color.red(startColor) + fraction * (Color.red(endColor) - Color.red(startColor)));
+                int green = (int) (Color.green(startColor) + fraction * (Color.green(endColor) - Color.green(startColor)));
+                int blue = (int) (Color.blue(startColor) + fraction * (Color.blue(endColor) - Color.blue(startColor)));
+                return Color.argb(alpha, red, green, blue);
+            }
+        };
+
+        public void setTranslucentStatus(int statusBarHeight) {
+            mStatusBarHeight = statusBarHeight;
+        }
+
+        public void setErrorImageRes(int resErrorImage) {
+            mErrorImageRes = resErrorImage;
+        }
+
+        private void refreshCurrentIdx(int position) {
+            if (mUrlList.size() > 1) {
+                tCurrentIdx.setVisibility(View.VISIBLE);
+                tCurrentIdx.setText((position + 1) + " / " + mUrlList.size());
+            } else {
+                tCurrentIdx.setVisibility(View.GONE);
+            }
+        }
+
+        @Override
+        public void setBackgroundColor(int color) {
+            mBackgroundColor = color;
+            super.setBackgroundColor(color);
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            mWidth = w;
+            mHeight = h;
+            MAX_TRANSLATE_X = mWidth / 2;
+            MAX_TRANSLATE_Y = mHeight / 2;
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            if (animImageTransform != null) animImageTransform.cancel();
+            animImageTransform = null;
+            if (animBackground != null) animBackground.cancel();
+            animBackground = null;
+        }
+
+        /**
+         * 当界面处于图片查看状态需要在Activity中的{@link Activity#onBackPressed()}
+         * 将事件传递给ImageWatcher优先处理<br/>
+         * 1、当处于收尾动画执行状态时，消费返回键事件<br/>
+         * 2、当图片处于放大状态时，执行图片缩放到原始大小的动画，消费返回键事件<br/>
+         * 3、当图片处于原始状态时，退出图片查看，消费返回键事件<br/>
+         * 4、其他情况，ImageWatcher并没有展示图片
+         */
+        public boolean handleBackPressed() {
+            return isInTransformAnimation || (iSource != null && getVisibility() == View.VISIBLE && onSingleTapConfirmed());
+        }
+
+        /**
+         * 将指定的ImageView形态(尺寸大小，缩放，旋转，平移，透明度)逐步转化到期望值
+         */
+        private void animSourceViewStateTransform(ImageView view, final ViewState vsResult) {
+            if (view == null) return;
+            if (animImageTransform != null) animImageTransform.cancel();
+
+            animImageTransform = ViewState.restoreByAnim(view, vsResult.mTag).addListener(mAnimTransitionStateListener).create();
+
+            if (animImageTransform != null) {
+                if (vsResult.mTag == ViewState.STATE_ORIGIN) {
+                    animImageTransform.addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            // 如果是退出查看操作，动画执行完后，原始被点击的ImageView恢复可见
+                            if (iOrigin != null) iOrigin.setVisibility(View.VISIBLE);
+                            setVisibility(View.GONE);
+                        }
+                    });
+                }
+                animImageTransform.start();
+            }
+        }
+
+        /**
+         * 执行ImageWatcher自身的背景色渐变至期望值[colorResult]的动画
+         */
+        private void animBackgroundTransform(final int colorResult) {
+            if (colorResult == mBackgroundColor) return;
+            if (animBackground != null) animBackground.cancel();
+            final int mCurrentBackgroundColor = mBackgroundColor;
+            animBackground = ValueAnimator.ofFloat(0, 1).setDuration(300);
+            animBackground.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator animation) {
+                    float p = (float) animation.getAnimatedValue();
+                    setBackgroundColor(mColorEvaluator.evaluate(p, mCurrentBackgroundColor, colorResult));
+                }
+            });
+            animBackground.start();
+        }
+
+        /**
+         * 当前展示图片长按的回调
+         */
+        public interface OnPictureLongPressListener {
+            /**
+             * @param v   当前被按的ImageView
+             * @param url 当前ImageView加载展示的图片url地址
+             * @param pos 当前ImageView在展示组中的位置
+             */
+            void onPictureLongPress(ImageView v, String url, int pos);
+        }
+
+        public void setOnPictureLongPressListener(OnPictureLongPressListener listener) {
+            mPictureLongPressListener = listener;
+        }
     }
-}
